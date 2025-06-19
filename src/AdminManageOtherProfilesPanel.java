@@ -1,3 +1,4 @@
+
 import java.awt.*;
 import java.sql.*;
 import javax.swing.*;
@@ -22,7 +23,7 @@ public class AdminManageOtherProfilesPanel extends JFrame {
         add(header, BorderLayout.NORTH);
 
         tableModel = new DefaultTableModel(new String[]{
-                "User ID", "First Name", "Last Name", "Email", "Role", "Phone"
+            "User ID", "First Name", "Last Name", "Email", "Role", "Phone", "Status"
         }, 0);
         userTable = new JTable(tableModel);
         userTable.setRowHeight(28);
@@ -35,6 +36,10 @@ public class AdminManageOtherProfilesPanel extends JFrame {
         deleteBtn = new JButton("Delete User");
         viewBtn = new JButton("View Profile");
         refreshBtn = new JButton("Refresh");
+
+        JButton lockUnlockBtn = new JButton("Lock/Unlock");
+        styleButton(lockUnlockBtn);
+        buttonPanel.add(lockUnlockBtn);
 
         for (JButton btn : new JButton[]{createBtn, editBtn, deleteBtn, viewBtn, refreshBtn}) {
             styleButton(btn);
@@ -50,6 +55,7 @@ public class AdminManageOtherProfilesPanel extends JFrame {
         deleteBtn.addActionListener(e -> deleteUser());
         refreshBtn.addActionListener(e -> loadUserData());
         viewBtn.addActionListener(e -> openViewUserDialog());
+        lockUnlockBtn.addActionListener(e -> toggleAccountStatus());
 
         setVisible(true);
     }
@@ -70,16 +76,18 @@ public class AdminManageOtherProfilesPanel extends JFrame {
             return;
         }
         try (PreparedStatement stmt = conn.prepareStatement(
-                "SELECT userID, firstName, lastName, email, role, phone FROM User WHERE role != 'admin'")) {
+                "SELECT userID, firstName, lastName, email, role, phone, accountStatus FROM User WHERE role != 'admin'")) {
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
+                String status = rs.getBoolean("accountStatus") ? "Active" : "Locked";
                 tableModel.addRow(new Object[]{
-                        rs.getInt("userID"),
-                        rs.getString("firstName"),
-                        rs.getString("lastName"),
-                        rs.getString("email"),
-                        rs.getString("role"),
-                        rs.getString("phone")
+                    rs.getInt("userID"),
+                    rs.getString("firstName"),
+                    rs.getString("lastName"),
+                    rs.getString("email"),
+                    rs.getString("role"),
+                    rs.getString("phone"),
+                    status
                 });
             }
         } catch (SQLException e) {
@@ -139,4 +147,32 @@ public class AdminManageOtherProfilesPanel extends JFrame {
         int userID = (int) tableModel.getValueAt(row, 0);
         new ViewUserProfilePanel(userID);
     }
+
+    private void toggleAccountStatus() {
+    int row = userTable.getSelectedRow();
+    if (row == -1) {
+        JOptionPane.showMessageDialog(this, "Please select a user to lock/unlock.");
+        return;
+    }
+
+    int userID = (int) tableModel.getValueAt(row, 0);
+    String currentStatus = (String) tableModel.getValueAt(row, 6); // Status column index
+
+    boolean newStatus = currentStatus.equalsIgnoreCase("Locked"); // flip it
+
+    try (Connection conn = DBConnection.getConnection();
+         PreparedStatement stmt = conn.prepareStatement(
+                 "UPDATE User SET accountStatus = ? WHERE userID = ?")) {
+        stmt.setBoolean(1, newStatus);
+        stmt.setInt(2, userID);
+        stmt.executeUpdate();
+
+        JOptionPane.showMessageDialog(this, "User has been " + (newStatus ? "unlocked." : "locked."));
+        loadUserData(); // refresh table
+    } catch (SQLException e) {
+        e.printStackTrace();
+        JOptionPane.showMessageDialog(this, "Failed to update account status.");
+    }
+}
+
 }
